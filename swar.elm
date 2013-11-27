@@ -1,11 +1,13 @@
 import Window
 import Keyboard
 
-type Player = {x:Float, y:Float, vx:Float, vy:Float, rot:Float}
+type Player = {x:Float, y:Float, vx:Float, vy:Float, rot:Float, projDelta:Float}
 type Projectile = {x:Float, y:Float, vx:Float, vy:Float}
 type GameState = {player1:Player,player2:Player,score1:Int,score2:Int,projectiles:[Projectile]}
 
 delta = inSeconds <~ fps 35
+
+shotDelay = 0.5
 
 type UserInput = {x1:Int, y1:Int, x2:Int, y2:Int, delta:Float} 
 
@@ -16,8 +18,8 @@ input = sampleOn delta (UserInput <~ lift .x Keyboard.wasd
                                    ~ lift .y Keyboard.arrows
                                    ~ delta) 
 
-player1Start = {x=-0.5,y=0,vx=0,vy=0,rot=0}
-player2Start = {x=0.5,y=0,vx=0,vy=0,rot=0}
+player1Start = {x=-0.5,y=0,vx=0,vy=0,rot=0,projDelta=0}
+player2Start = {x=0.5,y=0,vx=0,vy=0,rot=0 ,projDelta=0}
 defaultGame = {player1 = player1Start, player2 = player2Start, score1 = 0, score2 = 0, projectiles =[]}
 
 stepGame : UserInput -> GameState -> GameState
@@ -34,8 +36,17 @@ stepProjectiles delta gs = let gravAcc p = (-1)/(p.x^2 + p.y^2)
                            in { gs | projectiles <- filter (\p -> dist p < 1 && dist p > 0.1) <| map stepProjectile gs.projectiles }
 
 fireProjectiles : UserInput -> GameState -> GameState
-fireProjectiles inp gs = let fire p = { x = p.x + 0.03 * sin p.rot, y = p.y - 0.03 * cos p.rot, vx = p.vx + sin p.rot , vy = p.vy - cos p.rot}
-                         in {gs | projectiles <-  fire gs.player1 :: fire gs.player2 :: gs.projectiles} 
+fireProjectiles inp gameState= let fireProj p = { x = p.x + 0.03 * sin p.rot, y = p.y - 0.03 * cos p.rot, vx = p.vx + sin p.rot , vy = p.vy - cos p.rot}
+                                   resetProjDelta p = {p | projDelta <- 0} 
+                                   fireP1 gs = if gs.player1.projDelta > shotDelay
+                                               then {gs | player1 <- resetProjDelta gs.player1 
+                                                        , projectiles <- fireProj gs.player1 :: gs.projectiles} 
+                                               else gs 
+                                   fireP2 gs = if gs.player2.projDelta > shotDelay
+                                               then {gs | player2 <- resetProjDelta gs.player2
+                                                        , projectiles <- fireProj gs.player2 :: gs.projectiles} 
+                                               else gs 
+                                in (fireP2 . fireP1) gameState
 
 checkBounds : GameState -> GameState
 checkBounds gState = let dist p      = sqrt(p.x^2 + p.y^2) 
@@ -60,6 +71,7 @@ stepPlayerInput : Player -> (Float,Float,Float) -> Player
 stepPlayerInput p (inpX,inpY,delta) = {p | rot <- p.rot - 5 *inpX*delta
                                          , vx <- p.vx + inpY*(sin p.rot)*delta
                                          , vy <- p.vy - inpY*(cos p.rot)*delta
+                                         , projDelta <- p.projDelta + delta 
                                       } 
 
 stepPlayerGrav : Player -> Player
