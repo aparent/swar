@@ -20,30 +20,39 @@ defaultGame = {player1 = {x=-0.5,y=0,vx=0,vy=0,rot=0}, player2 = {x=0.5,y=0,vx=0
 stepGame : UserInput -> GameState -> GameState
 stepGame inp gState = stepPlayers inp gState
 
-
---{gState | player1 <- stepPlayer gState.player1 (toFloat inp.x1, toFloat inp.y1, inp.delta)
---                              , player2 <- stepPlayer gState.player2 (toFloat inp.x2, toFloat inp.y2, inp.delta)} 
-
 stepPlayers : UserInput -> GameState -> GameState
-stepPlayers inp gState = {gState | player1 <- stepPlayerInput gState.player1 (toFloat inp.x1, toFloat inp.y1, inp.delta)
-                                 , player2 <- stepPlayerInput gState.player2 (toFloat inp.x2, toFloat inp.y2, inp.delta)} 
+stepPlayers inp gState = let p1 = gState.player1
+                             p1Input = (toFloat inp.x1, toFloat inp.y1, inp.delta)
+                             p2 = gState.player2
+                             p2Input = (toFloat inp.x2, toFloat inp.y2, inp.delta)
+                         in {gState | player1 <- stepPlayerPos inp.delta <| stepPlayerGrav <| stepPlayerInput p1 p1Input
+                                    , player2 <- stepPlayerPos inp.delta <| stepPlayerGrav <| stepPlayerInput p2 p2Input} 
 
 stepPlayerInput : Player -> (Float,Float,Float) -> Player
 stepPlayerInput p (inpX,inpY,delta) = {p | rot <- p.rot - 5 *inpX*delta
-                                    , vx <- clamp (-0.5) 0.5 (p.vx + inpY*(sin p.rot)*delta)
-                                    , vy <- clamp (-0.5) 0.5 (p.vy - inpY*(cos p.rot)*delta)
-                                    ,  y <- if abs (p.y + p.vy*delta) > abs (cos <| abs p.x) 
-                                           then -p.y 
-                                           else p.y + p.vy * delta
-                                    ,  x <- if abs (p.x + p.vx * delta) > abs (cos <| abs p.y) 
-                                           then -p.x 
-                                           else p.x + p.vx * delta
-                                 } 
+                                         , vx <- p.vx + inpY*(sin p.rot)*delta
+                                         , vy <- p.vy - inpY*(cos p.rot)*delta
+                                      } 
+
+stepPlayerGrav : Player -> Player
+stepPlayerGrav p = let gravAcc = (-1)/(p.x^2 + p.y^2)
+                       theta = atan (p.x/p.y)
+                   in { p | vx <- clamp (-0.5) 0.5 <| p.vx + 0.001*gravAcc*(p.x/(sqrt(p.x^2+p.y^2)))
+                          , vy <- clamp (-0.5) 0.5 <| p.vy + 0.001*gravAcc*(p.y/(sqrt(p.x^2+p.y^2)))
+                      }
+
+stepPlayerPos : Float -> Player -> Player
+stepPlayerPos delta p = {p | y  <- p.y + p.vy * delta
+                           , x <- p.x + p.vx * delta
+                        } 
+
 
 display : (Int,Int) -> GameState -> Element
-display (w,h) ({player1,player2} as gameState) =
+display (w,h) gState =
   let wf = toFloat w
       hf = toFloat h
+      player1 = gState.player1
+      player2 = gState.player2
       gameRad = min wf hf / 2
       gameBoundry = circle (gameRad) 
                     |> filled black 
